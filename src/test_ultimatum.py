@@ -8,7 +8,20 @@ from typing import Dict,List
 
 from ultimatum.base import (normalized, mutate, Evolution, mkuniform,
     mknorm, Strategy, OFFERS, assert_valid_offer, propose, respond, Individ,
-    mutate_ )
+    mutate_, Competition, compete, Population, evolve, scores )
+
+
+def plotstrategy(s:Strategy)->None:
+  plt.bar(arange(len(s)), height=s)
+
+
+def mknoob()->Individ:
+  return Individ(normalized([1 if x==0.0 else 0.0 for x in OFFERS]),
+                 normalized([1 if x==1.0 else 0.0 for x in OFFERS]))
+
+def isnoob(i:Individ)->bool:
+  return i.pstrategy[0]==1.0 and i.rstrategy[-1]==1.0
+
 
 def demo_random():
   vals=linspace(0,100,num=101)
@@ -27,11 +40,6 @@ def demo_random():
   plt.subplot(212)
   plt.hist(samples,bins=101)
   plt.show()
-
-
-
-def plotstrategy(s:Strategy)->None:
-  plt.bar(arange(len(s)), height=s)
 
 
 def demo_mutate():
@@ -73,6 +81,27 @@ def test_response():
   assert r2s==set([False,True]), f"{r2s}"
   assert r3s==set([True]), f"{r3s}"
 
+def test_compete():
+  for i in range(100):
+    pop=Population([mknoob(),Individ(mkuniform(),mkuniform())])
+    assert isnoob(pop.individs[0])
+    comp=Competition(pop,10)
+    compete(comp,pop)
+    # print('--->', comp.pscores, comp.rscores)
+    assert comp.pscores[0] == 0
+    assert comp.rscores[0] == 0, f"{comp.log}"
+    assert scores(comp,0) <= scores(comp,1), f"{scores(comp,0)} should be < {scores(comp,1)}"
+
+def test_evolve():
+  for i in range(100):
+    pop=Population([mknoob(),Individ(mkuniform(),mkuniform())])
+    comp=Competition(pop,10)
+    compete(comp,pop)
+    assert scores(comp,0)==0
+    e=Evolution(0.5)
+    pop2=evolve(e,comp,pop)
+    for i in pop2.individs:
+      assert not isnoob(i)
 
 
 

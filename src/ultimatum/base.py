@@ -49,7 +49,7 @@ def respond(r:Individ, to_proposer:Offer)->bool:
   assert_valid_offer(to_proposer)
   to_responder=1.0-to_proposer
   demand=choice(OFFERS,p=r.rstrategy)
-  return to_responder>=demand
+  return to_responder>demand
 
 
 class Population:
@@ -60,13 +60,16 @@ class Population:
 #   return abs(a*b) // gcd(a, b)
 
 class Competition:
-  def __init__(self, pop:Population):
-    self.nrounds=10*int(len(pop.individs))
+  def __init__(self, pop:Population, nrounds:Optional[int]=None):
+    self.nrounds=nrounds or 10*int(len(pop.individs))
     self.award=Money(100)
     self.ids=list(range(len(pop.individs)))
     self.pscores:Dict[int,Money]={x:0 for x in self.ids}
     self.rscores:Dict[int,Money]={x:0 for x in self.ids}
+    self.log:list=[]
 
+def scores(comp:Competition, i:int)->Float:
+  return float(comp.pscores[i]+comp.rscores[i])
 
 def compete(comp:Competition, pop:Population)->None:
   ps=choice(comp.ids, size=comp.nrounds, replace=True)
@@ -74,14 +77,14 @@ def compete(comp:Competition, pop:Population)->None:
   for p,r in zip(ps,rs):
     offer=propose(pop.individs[p])
     response=respond(pop.individs[r],offer)
-    if response is True:
+    if response:
       comp.pscores[p]+=comp.award*offer
       comp.rscores[r]+=comp.award*(1.0-offer)
-
+    comp.log.append((p,r,offer,response))
 
 class Evolution:
-  def __init__(self):
-    self.cutoff:Float=0.1
+  def __init__(self, cutoff:Float=0.1):
+    self.cutoff:Float=cutoff
 
 def mutate_(e:Evolution, s:Strategy)->Tuple[Strategy,int]:
   s2=deepcopy(s)
@@ -97,13 +100,16 @@ def mutate(e,s):
 def evolve(e:Evolution, comp:Competition, pop:Population)->Population:
 
   nids=len(pop.individs)
+  # print(int(nids*e.cutoff))
+
   ids2=sorted(comp.ids, key=lambda i:comp.pscores[i]+comp.rscores[i])[int(nids*e.cutoff):]
   inds2=[pop.individs[i] for i in ids2]
+  # print('passed',ids2)
 
   while len(inds2)<nids:
     i=choice(range(len(inds2)))
-    ind=pop.individs[i]
-    inds2.append(Individ(mutate(e,ind.pstrategy),mutate(e,ind.rstragy)))
+    ind=inds2[i]
+    inds2.append(Individ(mutate(e,ind.pstrategy),mutate(e,ind.rstrategy)))
 
   return Population(inds2)
 

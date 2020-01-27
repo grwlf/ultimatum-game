@@ -6,8 +6,9 @@ from numpy.random import choice, uniform
 from collections import defaultdict
 from typing import Dict,List
 
-from ultimatum.base import (normalized, mutate, Evolution, Proposer, mkuniform,
-    mknorm, Strategy, OFFERS, assert_valid_offer, propose, respond, Responder )
+from ultimatum.base import (normalized, mutate, Evolution, mkuniform,
+    mknorm, Strategy, OFFERS, assert_valid_offer, propose, respond, Individ,
+    mutate_ )
 
 def demo_random():
   vals=linspace(0,100,num=101)
@@ -35,34 +36,34 @@ def plotstrategy(s:Strategy)->None:
 
 def demo_mutate():
   e=Evolution()
-  ind=Proposer(mknorm())
-  ind2,nbin=mutate(e, ind)
-  plotstrategy(ind.strategy)
-  plotstrategy(ind2.strategy)
+  s=mknorm()
+  s2,nbin=mutate_(e, s)
+  plotstrategy(s)
+  plotstrategy(s2)
   plt.show()
 
 
 
 def test_mutate():
   e=Evolution()
-  ind=Proposer(mkuniform())
-  s=set(range(len(ind.strategy)))
+  st=mkuniform()
+  s=set(range(len(st)))
   for i in range(1000):
-    ind2,nbin=mutate(e, ind)
+    st2,nbin=mutate_(e, st)
     s-=set([nbin])
 
   assert s==set([])
 
 
 def test_propose():
-  p=Proposer(normalized([(0 if (x<0.1 or x>0.4) else 20) for x in OFFERS]))
+  p=Individ(normalized([(0 if (x<0.1 or x>0.4) else 20) for x in OFFERS]),mkuniform())
   for x in range(1000):
     offer=propose(p)
     assert_valid_offer(offer)
     assert (offer>=0.1 and offer<=0.4)
 
 def test_response():
-  r=Responder(normalized([(0.0 if (x<0.1 or x>0.4) else 20.0) for x in OFFERS]))
+  r=Individ(mkuniform(), normalized([(0.0 if (x<0.1 or x>0.4) else 20.0) for x in OFFERS]))
   r1s=set(); r2s=set(); r3s=set()
   for x in range(1000):
     r1s.add(respond(r, 1.0-0.05))

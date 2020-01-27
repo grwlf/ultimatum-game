@@ -35,52 +35,45 @@ def mkuniform()->Strategy:
 
 
 
-class Proposer:
-  def __init__(self, s:Strategy):
-    self.strategy=s
-
-class Responder:
-  def __init__(self, s:Strategy):
-    self.strategy=s
+class Individ:
+  def __init__(self, ps:Strategy, rs:Strategy):
+    self.pstrategy=ps
+    self.rstrategy=rs
 
 
-def propose(p:Proposer)->Offer:
-  r=choice(OFFERS,p=p.strategy)
+def propose(p:Individ)->Offer:
+  r=choice(OFFERS,p=p.pstrategy)
   return r
 
-def respond(r:Responder, to_proposer:Offer)->bool:
+def respond(r:Individ, to_proposer:Offer)->bool:
   assert_valid_offer(to_proposer)
   to_responder=1.0-to_proposer
-  demand=choice(OFFERS,p=r.strategy)
+  demand=choice(OFFERS,p=r.rstrategy)
   return to_responder>=demand
 
 
 class Population:
-  def __init__(self, proposers:List[Proposer], responders:List[Responder]):
-    self.proposers=proposers
-    self.responders=responders
+  def __init__(self, individs:List[Individ]):
+    self.individs=individs
 
-def lcm(a:int,b:int)->int:
-  return abs(a*b) // gcd(a, b)
-
+# def lcm(a:int,b:int)->int:
+#   return abs(a*b) // gcd(a, b)
 
 class Competition:
   def __init__(self, pop:Population):
-    pop_lcm=lcm(len(pop.proposers),len(pop.responders))
-    self.nrounds=int(pop_lcm)
+    self.nrounds=10*int(len(pop.individs))
     self.award=Money(100)
-    self.pids=list(range(len(pop.proposers)))
-    self.rids=list(range(len(pop.responders)))
-    self.pscores:Dict[int,Money]={x:0 for x in self.pids}
-    self.rscores:Dict[int,Money]={x:0 for x in self.rids}
+    self.ids=list(range(len(pop.individs)))
+    self.pscores:Dict[int,Money]={x:0 for x in self.ids}
+    self.rscores:Dict[int,Money]={x:0 for x in self.ids}
 
 
 def compete(comp:Competition, pop:Population)->None:
-  ps=choice(pop.proposers, size=comp.nrounds, replace=False)
-  rs=choice(pop.responders, size=comp.nrounds, replace=False)
+  ps=choice(comp.ids, size=comp.nrounds, replace=True)
+  rs=choice(comp.ids, size=comp.nrounds, replace=True)
   for p,r in zip(ps,rs):
-    offer=propose(pop.proposers[p])
-    response=respond(pop.responders[r],offer)
+    offer=propose(pop.individs[p])
+    response=respond(pop.individs[r],offer)
     if response is True:
       comp.pscores[p]+=comp.award*offer
       comp.rscores[r]+=comp.award*(1.0-offer)
@@ -90,33 +83,29 @@ class Evolution:
   def __init__(self):
     self.cutoff:Float=0.1
 
-def mutate(e:Evolution, ind:Union[Proposer,Responder])->Tuple[Any,int]:
-  ind2=deepcopy(ind)
-  nbin=choice(range(len(ind2.strategy)))
-  ind2.strategy[nbin]+=choice([-1.0/(DISCR+1),1.0/(DISCR+1)])
-  ind2.strategy[nbin]=clip(ind2.strategy[nbin],0,1.0)
-  ind2.strategy=normalized(ind2.strategy)
-  return ind2,nbin
+def mutate_(e:Evolution, s:Strategy)->Tuple[Strategy,int]:
+  s2=deepcopy(s)
+  nbin=choice(range(len(s2)))
+  s2[nbin]+=choice([-1.0/(DISCR+1),1.0/(DISCR+1)])
+  s2[nbin]=clip(s2[nbin],0,1.0)
+  s2=normalized(s2)
+  return s2,nbin
+
+def mutate(e,s):
+  return mutate_(e,s)[0]
 
 def evolve(e:Evolution, comp:Competition, pop:Population)->Population:
 
-  def _mutate(ids:List[int], individuals:list, scores:dict):
-    ids2=sorted(ids, key=lambda xid:scores[xid])
-    ids2=ids2[int(len(ids2)*e.cutoff):]
-    p2=[individuals[xid] for xid in ids2]
-    while len(p2)<len(ids):
-      xid=choice(ids,p=normalized(map(lambda xid:scores[xid],ids)))
-      ind,_=mutate(e, individuals[xid])
-      p2.append(ind)
-    return p2
+  nids=len(pop.individs)
+  ids2=sorted(comp.ids, key=lambda i:comp.pscores[i]+comp.rscores[i])[int(nids*e.cutoff):]
+  inds2=[pop.individs[i] for i in ids2]
 
-  ps2=_mutate(comp.pids, pop.proposers, comp.pscores)
-  rs2=_mutate(comp.rids, pop.responders, comp.rscores)
+  while len(inds2)<nids:
+    i=choice(range(len(inds2)))
+    ind=pop.individs[i]
+    inds2.append(Individ(mutate(e,ind.pstrategy),mutate(e,ind.rstragy)))
 
-  assert len(ps2)==len(pop.proposers)
-  assert len(rs2)==len(pop.responders)
-
-  return Population(ps2, rs2)
+  return Population(inds2)
 
 
 

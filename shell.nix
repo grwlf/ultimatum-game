@@ -25,10 +25,14 @@ let
         matplotlib
         numpy
         tqdm
+        # scipy
       ]) ++ (with pkgs;[ gnumake ]);
 
     shellHook = with pkgs; ''
+      export CWD=`pwd`
       export PYTHONPATH=`pwd`/src:$PYTHONPATH
+      alias ipython=`pwd`/ipython.sh
+      export QT_QPA_PLATFORM_PLUGIN_PATH=`echo ${pkgs.qt5.qtbase.bin}/lib/qt-*/plugins/platforms/`
     '';
   };
 

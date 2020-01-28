@@ -1,26 +1,29 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from numpy import linspace, array, arange
+from numpy import linspace, array, arange, isclose
 from numpy.random import choice, uniform
 from collections import defaultdict
 from typing import Dict,List
 
-from ultimatum.base import (normalized, mutate, Evolution, mkuniform,
-    mknorm, Strategy, OFFERS, assert_valid_offer, propose, respond, Individ,
-    mutate_, Competition, compete, Population, evolve, scores )
+from ultimatum.base import (normalized, mutate, Evolution, mkuniform, mknorm,
+    Strategy, OFFERS, assert_valid_offer, propose, respond, Individ, mutate_,
+    Competition, compete, Population, evolve, scores, istat, pstat,
+    mean_strategy, strat_mean, strat_std, run1, run )
 
 
-def plotstrategy(s:Strategy)->None:
-  plt.bar(arange(len(s)), height=s)
 
+def pop1(n=30)->Population:
+  return Population([Individ(mkuniform(),mkuniform()) for x in range(n)])
 
 def mknoob()->Individ:
   return Individ(normalized([1 if x==0.0 else 0.0 for x in OFFERS]),
                  normalized([1 if x==1.0 else 0.0 for x in OFFERS]))
-
 def isnoob(i:Individ)->bool:
   return i.pstrategy[0]==1.0 and i.rstrategy[-1]==1.0
+
+def plotstrategy(s:Strategy)->None:
+  plt.bar(arange(len(s)), height=s)
 
 
 def demo_random():
@@ -49,6 +52,22 @@ def demo_mutate():
   plotstrategy(s)
   plotstrategy(s2)
   plt.show()
+
+
+def demo_meanstrat():
+  ss=[mknorm() for _ in range(30)]
+  ms=mean_strategy(ss)
+  plotstrategy(ms)
+  plt.show()
+  print(strat_mean(ms), strat_std(ms))
+
+
+
+#  _____         _
+# |_   _|__  ___| |_ ___
+#   | |/ _ \/ __| __/ __|
+#   | |  __/\__ \ |_\__ \
+#   |_|\___||___/\__|___/
 
 
 
@@ -81,6 +100,14 @@ def test_response():
   assert r2s==set([False,True]), f"{r2s}"
   assert r3s==set([True]), f"{r3s}"
 
+def test_noob():
+  assert istat(mknoob()) == (0.0,1.0)
+  p=Population([mknoob(),mknoob()])
+  assert strat_mean(pstat(p).mean_proposer_strategy)==0.0
+  assert strat_mean(pstat(p).mean_responder_strategy)==1.0
+  p2=Population([mknoob(),Individ(mkuniform(),mkuniform())])
+  assert strat_mean(pstat(p2).mean_proposer_strategy)>0.0
+
 def test_compete():
   for i in range(100):
     pop=Population([mknoob(),Individ(mkuniform(),mkuniform())])
@@ -103,5 +130,8 @@ def test_evolve():
     for i in pop2.individs:
       assert not isnoob(i)
 
-
+def test_mean_strategy():
+  ms=mean_strategy([mkuniform(), mknorm()])
+  s=np.sum(ms)
+  assert isclose(s,1.0), f"{s}"
 

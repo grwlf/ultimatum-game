@@ -1,9 +1,11 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
-from numpy import linspace, array, arange, clip
+from numpy import linspace, array, arange, clip, isclose
 from numpy.random import choice, uniform
-from typing import Any, Optional, List, Dict, Union, Tuple
-from math import gcd
+from typing import ( Any, Optional, List, Dict, Union, Tuple, NamedTuple,
+    Iterator, Callable )
+from math import gcd, sqrt
 from copy import deepcopy
 from scipy.stats import norm
 
@@ -13,25 +15,52 @@ OFFERS=linspace(0.0,1.0,num=DISCR+1)
 Float=float
 Offer=float
 Money=float
-Strategy=List[Float]
+# Strategy=List[Float]
 
+class Strategy(list):
+  pass
 
 def assert_valid_offer(o:Offer)->None:
   assert o>=0.0 and o<=1.0, f"Invalid offer {o}"
 
-def normalized(x):
+def normalized(x:List[Float])->Strategy:
   p=array(x)
+  assert sum(p)>0
   p=p/sum(p)
-  return p
-
+  return Strategy(p)
 
 def mknorm()->Strategy:
-  mu=uniform(0,100)
-  sigma=uniform(0.5,10)
+  mu=uniform(0.0,1.0)
+  sigma=uniform(0.05,0.3)
   return normalized([norm.pdf(x,mu,sigma) for x in OFFERS])
 
 def mkuniform()->Strategy:
   return normalized([1.0 for x in OFFERS])
+
+def strat_mean(s:Strategy)->Float:
+  """ Mean value of astrategy """
+  acc:Float=0.0
+  for o,prob in zip(OFFERS,s):
+    acc+=o*prob
+  return acc
+
+def strat_std(s:Strategy)->Float:
+  """ Mean value of astrategy """
+  acc:Float=0.0
+  mean=strat_mean(s)
+  for o,prob in zip(OFFERS,s):
+    acc+=(prob-mean)**2
+  return sqrt(acc/len(OFFERS))
+
+def strat_stat(s:Strategy):
+  return strat_mean(s),strat_std(s)
+
+def mean_strategy(ss:List[Strategy])->Strategy:
+  """ Mean strategy """
+  s=[np.sum([s[i] for s in ss])/len(ss) for (i,o) in enumerate(OFFERS)]
+  assert isclose(np.sum(s),1.0)
+  return Strategy(s)
+
 
 
 
@@ -39,6 +68,9 @@ class Individ:
   def __init__(self, ps:Strategy, rs:Strategy):
     self.pstrategy=ps
     self.rstrategy=rs
+
+def istat(i:Individ)->Tuple[Float,Float]:
+  return strat_mean(i.pstrategy), strat_mean(i.rstrategy)
 
 
 def propose(p:Individ)->Offer:
@@ -56,6 +88,16 @@ class Population:
   def __init__(self, individs:List[Individ]):
     self.individs=individs
 
+class PopStat(NamedTuple):
+  mean_proposer_strategy:Strategy
+  mean_responder_strategy:Strategy
+
+def pstat(pop:Population)->PopStat:
+  mps=mean_strategy([i.pstrategy for i in pop.individs])
+  mrs=mean_strategy([i.rstrategy for i in pop.individs])
+  return PopStat(mps,mrs)
+
+  # ps=[istat for i in pop.individs]
 # def lcm(a:int,b:int)->int:
 #   return abs(a*b) // gcd(a, b)
 
@@ -98,25 +140,91 @@ def mutate(e,s):
   return mutate_(e,s)[0]
 
 def evolve(e:Evolution, comp:Competition, pop:Population)->Population:
-
   nids=len(pop.individs)
-  # print(int(nids*e.cutoff))
-
   ids2=sorted(comp.ids, key=lambda i:comp.pscores[i]+comp.rscores[i])[int(nids*e.cutoff):]
   inds2=[pop.individs[i] for i in ids2]
-  # print('passed',ids2)
-
   while len(inds2)<nids:
     i=choice(range(len(inds2)))
     ind=inds2[i]
     inds2.append(Individ(mutate(e,ind.pstrategy),mutate(e,ind.rstrategy)))
-
   return Population(inds2)
 
 
 
+def plot_runtime(name:str)->Callable[[List[Float],Dict[str,List[dict]]],None]:
+  """ Generic runtime plotter. Take name, return updater function to feed the
+  plot with updated data """
+
+  fig=plt.figure()
+  ax=fig.add_subplot(1, 1, 1)
+  ax.set_ylabel(name)
+  ax.grid()
+  pl:dict={}
+  if plt.isinteractive():
+    plt.show()
+
+  def updater(x,ys):
+    nonlocal pl
+    ax.collections.clear()
+    for nm,y in ys.items():
+      ymean=np.array(y['mean'])
+      if (nm+'-mean') not in pl:
+        pl[nm+'-mean']=ax.plot(x,ymean,label=nm,color=y['color'])[0]
+        if 'std' in y:
+          ystd=np.array(y['std'])
+          pl[nm+'-std']=ax.fill_between(x, ymean-ystd, ymean+ystd, facecolor=y['color'], alpha=0.3)
+      else:
+        pl[nm+'-mean'].set_data(x,ymean)
+        # pl[nm+'-std'].set_data(x,ymean-ystd, ymean+ystd)
+        if 'std' in y:
+          ystd=np.array(y['std'])
+          pl[nm+'-std']=ax.fill_between(x, ymean-ystd, ymean+ystd, facecolor=y['color'], alpha=0.3)
+
+    ax.relim()
+    ax.autoscale_view()
+    ax.legend()
+    fig.canvas.draw()
+    plt.pause(0.00001)  # http://stackoverflow.com/a/24228275
+    if not plt.isinteractive():
+      plt.savefig(name+'.png')
+
+  return updater
 
 
+
+#  ____
+# |  _ \ _   _ _ __
+# | |_) | | | | '_ \
+# |  _ <| |_| | | | |
+# |_| \_\\__,_|_| |_|
+
+def run1(nepoch=3000, n=30, nrounds=10*30, cutoff=0.1)->Iterator[Tuple[int,Population]]:
+  pop=Population([Individ(mknorm(),mknorm()) for _ in range(n)])
+  for epoch in range(nepoch):
+    yield epoch,pop
+    comp=Competition(pop,nrounds)
+    compete(comp,pop)
+    e=Evolution(cutoff=cutoff)
+    pop2=evolve(e,comp,pop)
+    pop=pop2
+  yield nepoch,pop
+
+
+def run():
+  epoches=[]
+  pmeans=[]; rmeans=[]
+  pstds=[]; rstds=[]
+  updater=plot_runtime('evolution')
+  for i,pop in run1():
+    pmean,pstd=strat_stat(pstat(pop).mean_proposer_strategy)
+    rmean,rstd=strat_stat(pstat(pop).mean_responder_strategy)
+    print(i,pmean,pstd,rmean,rstd)
+    epoches.append(i)
+    pmeans.append(pmean); rmeans.append(rmean)
+    pstds.append(pstd); rstds.append(rstd)
+    if i%10 == 0:
+      updater(epoches,{"Proposer's mean":{'mean':pmeans,'color':'blue'},
+                       "Responder's mean":{'mean':rmeans,'color':'orange'}})
 
 
 

@@ -1,13 +1,19 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from numpy import linspace, array, arange, clip, isclose
-from numpy.random import choice, uniform
+from numpy.random import choice, uniform, seed
 from typing import ( Any, Optional, List, Dict, Union, Tuple, NamedTuple,
     Iterator, Callable )
 from math import gcd, sqrt
 from copy import deepcopy
 from scipy.stats import norm
+
+from json import dumps as json_dumps, loads as json_loads
+
+from os import chdir
 
 DISCR=100
 OFFERS=linspace(0.0,1.0,num=DISCR+1)
@@ -88,6 +94,14 @@ class Population:
   def __init__(self, individs:List[Individ]):
     self.individs=individs
 
+JSON=Any
+
+def pop_serialize(pop:Population)->JSON:
+  return [[list(i.pstrategy),list(i.rstrategy)] for i in pop.individs]
+
+def pop_deserialize(json:JSON)->Population:
+  return Population([Individ(Strategy(p),Strategy(r)) for p,r in json])
+
 class PopStat(NamedTuple):
   mean_proposer_strategy:Strategy
   mean_responder_strategy:Strategy
@@ -151,17 +165,17 @@ def evolve(e:Evolution, comp:Competition, pop:Population)->Population:
 
 
 
-def plot_runtime(name:str)->Callable[[List[Float],Dict[str,List[dict]]],None]:
+def plot_runtime(
+    name:str,
+    save_png:bool=True
+    )->Callable[[List[Float],Dict[str,List[dict]]],None]:
   """ Generic runtime plotter. Take name, return updater function to feed the
   plot with updated data """
-
   fig=plt.figure()
   ax=fig.add_subplot(1, 1, 1)
   ax.set_ylabel(name)
   ax.grid()
   pl:dict={}
-  if plt.isinteractive():
-    plt.show()
 
   def updater(x,ys):
     nonlocal pl
@@ -185,8 +199,9 @@ def plot_runtime(name:str)->Callable[[List[Float],Dict[str,List[dict]]],None]:
     ax.legend()
     fig.canvas.draw()
     plt.pause(0.00001)  # http://stackoverflow.com/a/24228275
-    if not plt.isinteractive():
+    if save_png:
       plt.savefig(name+'.png')
+      print(f"Saved {name+'.png'}")
 
   return updater
 
@@ -198,7 +213,7 @@ def plot_runtime(name:str)->Callable[[List[Float],Dict[str,List[dict]]],None]:
 # |  _ <| |_| | | | |
 # |_| \_\\__,_|_| |_|
 
-def run1(nepoch=3000, n=30, nrounds=10*30, cutoff=0.1)->Iterator[Tuple[int,Population]]:
+def runI(nepoch=30000, n=300, nrounds=10*30, cutoff=0.1)->Iterator[Tuple[int,Population]]:
   pop=Population([Individ(mknorm(),mknorm()) for _ in range(n)])
   for epoch in range(nepoch):
     yield epoch,pop
@@ -210,21 +225,89 @@ def run1(nepoch=3000, n=30, nrounds=10*30, cutoff=0.1)->Iterator[Tuple[int,Popul
   yield nepoch,pop
 
 
-def run():
-  epoches=[]
+def run1(cwd:Optional[str]=None, *args, **kwargs):
+  seed(abs(hash(cwd)) % 2**32)
+  if cwd:
+    print(f'Building in {cwd}')
+    chdir(cwd)
+
+  epoches=[]; pops=[]
   pmeans=[]; rmeans=[]
-  pstds=[]; rstds=[]
-  updater=plot_runtime('evolution')
-  for i,pop in run1():
+  updater=plot_runtime('evolution', save_png=True)
+  for i,pop in runI(*args,**kwargs):
     pmean,pstd=strat_stat(pstat(pop).mean_proposer_strategy)
     rmean,rstd=strat_stat(pstat(pop).mean_responder_strategy)
     print(i,pmean,pstd,rmean,rstd)
     epoches.append(i)
     pmeans.append(pmean); rmeans.append(rmean)
-    pstds.append(pstd); rstds.append(rstd)
+    pops.append(pop)
     if i%10 == 0:
       updater(epoches,{"Proposer's mean":{'mean':pmeans,'color':'blue'},
                        "Responder's mean":{'mean':rmeans,'color':'orange'}})
+
+  with open('history.json','w') as f:
+    f.write(json_dumps([pop_serialize(pop) for pop in pops], indent=4))
+
+
+from pylightnix import ( Config, Manager, Build, DRef, RRef, ConfigAttrs,
+    mkdrv, instantiate, realizeMany, build_cattrs, build_wrapper, match_all,
+    build_outpaths, Path, config_dict, build_config, store_initialize,
+    match_only, build_paths, build_outpath, realize )
+from multiprocessing.pool import Pool
+
+store_initialize('/tmp/ultimatum', '/tmp')
+
+def _build_process(a:ConfigAttrs, o:Path):
+  run1(cwd=o, nepoch=a.nepoch, n=a.n, nrounds=a.nrounds, cutoff=a.cutoff)
+
+def breed_node(m:Manager)->DRef:
+  def _config()->Config:
+    name='ultimatum'
+    nepoch=30000
+    n=300
+    nrounds=10*30
+    cutoff=0.1
+    version=6
+    return Config(locals())
+  def _build(b:Build)->None:
+    p=Pool()
+    p.starmap(_build_process,[(build_cattrs(b),o) for o in build_outpaths(b)],1)
+  return mkdrv(m, inst=_config, matcher=match_all(), realizer=build_wrapper(_build,nouts=10))
+
+
+
+def analyze_node(m:Manager)->DRef:
+  def _config()->Config:
+    return Config({
+      'name':'analyzer',
+      'version':3,
+      'history':[breed_node(m), 'history.json']
+    })
+  def _build(b:Build)->None:
+    chdir(build_outpath(b))
+    c=build_cattrs(b)
+    pops:List[Population]=[]
+
+    fig=plt.figure()
+    ax=fig.add_subplot(1, 1, 1)
+    ax.set_ylabel('mean strategies')
+    ax.grid()
+
+    for nhist,histpath in enumerate(build_paths(b, c.history)):
+      epoches=[]; pmeans=[]; rmeans=[]
+      with open(histpath,'r') as f:
+        for i,pop in enumerate([pop_deserialize(j) for j in json_loads(f.read())]):
+          epoches.append(i)
+          pmean,pstd=strat_stat(pstat(pop).mean_proposer_strategy)
+          rmean,rstd=strat_stat(pstat(pop).mean_responder_strategy)
+          pmeans.append(pmean); rmeans.append(rmean)
+          print('.',end='',flush=True)
+      ax.plot(epoches,pmeans,label=f'pmeans{nhist}',color='blue')
+      ax.plot(epoches,rmeans,label=f'rmeans{nhist}',color='orange')
+    plt.savefig('figure.png')
+  return mkdrv(m, inst=_config, matcher=match_only(), realizer=build_wrapper(_build))
+
+
 
 
 

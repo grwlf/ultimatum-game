@@ -168,7 +168,7 @@ def evolve(e:Evolution, comp:Competition, pop:Population)->Population:
 def plot_runtime(
     name:str,
     save_png:bool=True
-    )->Callable[[List[Float],Dict[str,List[dict]]],None]:
+    )->Callable[[List[Float],Dict[str,Dict[str,Any]]],None]:
   """ Generic runtime plotter. Take name, return updater function to feed the
   plot with updated data """
   fig=plt.figure()
@@ -231,22 +231,25 @@ def run1(cwd:Optional[str]=None, *args, **kwargs):
     print(f'Building in {cwd}')
     chdir(cwd)
 
-  epoches=[]; pops=[]
+  epoches=[];
   pmeans=[]; rmeans=[]
   updater=plot_runtime('evolution', save_png=True)
   for i,pop in runI(*args,**kwargs):
     pmean,pstd=strat_stat(pstat(pop).mean_proposer_strategy)
     rmean,rstd=strat_stat(pstat(pop).mean_responder_strategy)
     print(i,pmean,pstd,rmean,rstd)
-    epoches.append(i)
+    epoches.append(float(i))
     pmeans.append(pmean); rmeans.append(rmean)
-    pops.append(pop)
     if i%10 == 0:
       updater(epoches,{"Proposer's mean":{'mean':pmeans,'color':'blue'},
                        "Responder's mean":{'mean':rmeans,'color':'orange'}})
 
   with open('history.json','w') as f:
-    f.write(json_dumps([pop_serialize(pop) for pop in pops], indent=4))
+    f.write(json_dumps([epoches, pmeans, rmeans], indent=4))
+
+
+
+
 
 
 from pylightnix import ( Config, Manager, Build, DRef, RRef, ConfigAttrs,
@@ -268,12 +271,13 @@ def breed_node(m:Manager)->DRef:
     nrounds=10*30
     cutoff=0.1
     version=6
+    nrunners=10
     return Config(locals())
   def _build(b:Build)->None:
+    c=build_cattrs(b)
     p=Pool()
-    p.starmap(_build_process,[(build_cattrs(b),o) for o in build_outpaths(b)],1)
-  return mkdrv(m, inst=_config, matcher=match_all(), realizer=build_wrapper(_build,nouts=10))
-
+    p.starmap(_build_process,[(c,o) for o in build_outpaths(b,nouts=c.nrunners)],1)
+  return mkdrv(m, config=_config(), matcher=match_all(), realizer=build_wrapper(_build))
 
 
 def analyze_node(m:Manager)->DRef:
@@ -286,7 +290,6 @@ def analyze_node(m:Manager)->DRef:
   def _build(b:Build)->None:
     chdir(build_outpath(b))
     c=build_cattrs(b)
-    pops:List[Population]=[]
 
     fig=plt.figure()
     ax=fig.add_subplot(1, 1, 1)
@@ -294,18 +297,13 @@ def analyze_node(m:Manager)->DRef:
     ax.grid()
 
     for nhist,histpath in enumerate(build_paths(b, c.history)):
-      epoches=[]; pmeans=[]; rmeans=[]
+      epoches:List[float]=[]; pmeans:List[float]=[]; rmeans:List[float]=[]
       with open(histpath,'r') as f:
-        for i,pop in enumerate([pop_deserialize(j) for j in json_loads(f.read())]):
-          epoches.append(i)
-          pmean,pstd=strat_stat(pstat(pop).mean_proposer_strategy)
-          rmean,rstd=strat_stat(pstat(pop).mean_responder_strategy)
-          pmeans.append(pmean); rmeans.append(rmean)
-          print('.',end='',flush=True)
+        epoches,pmeans,rmeans=json_loads(f.read())
       ax.plot(epoches,pmeans,label=f'pmeans{nhist}',color='blue')
       ax.plot(epoches,rmeans,label=f'rmeans{nhist}',color='orange')
     plt.savefig('figure.png')
-  return mkdrv(m, inst=_config, matcher=match_only(), realizer=build_wrapper(_build))
+  return mkdrv(m, config=_config(), matcher=match_only(), realizer=build_wrapper(_build))
 
 
 

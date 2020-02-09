@@ -1,0 +1,221 @@
+Ultimatum gmae experiment with Pylightnix
+=========================================
+
+First, lets import various system functions in advance.
+
+```python
+import matplotlib.pyplot as plt
+from json import loads as json_loads, dumps as json_dumps
+from os import chdir
+from typing import List, Optional
+```
+
+Next, lets become sure that Pylightnix storage is initialized in a separate
+place. `store_initialize` would initialize it for us if it is not present.
+
+```python
+from pylightnix import ( Config, Manager, Build, DRef, RRef, ConfigAttrs,
+    mkdrv, instantiate, realizeMany, build_cattrs, build_wrapper, match_all,
+    build_outpaths, Path, config_dict, build_config, store_initialize,
+    match_only, build_paths, build_outpath, realize )
+store_initialize('/tmp/ultimatum', '/tmp')
+```
+
+The task
+--------
+
+Now to the experiment: the function we are mostly interested in, is defined in
+`ultimatum.base` file and has the following type signature:
+
+`def run1(cwd:str, nepoch=30000, n=300, nrounds=10*30, cutoff=0.1)->None`
+
+This function runs a single instance of evolutionary model of the Ultimatum
+game. By default, it runs `30K` epoches of evolution on a population of `300`
+individuals. `nrounds` and `cutoff` are hyperparamethers which defines minor
+details of our evolution algorithm.
+
+As a result, the function stores `history.json` and `evolution.png` files in a
+directory, specified with `cwd` argument. History would contain information on
+mean strategies of both types of game agents (proposer and responder), for every
+epoch of the evolution. The information consists of two floats, representing
+mean shares that members of population 'want' to own when participating the game
+on each of 2 sides.
+
+Our goal is to run 10 iterations of this algorithm and display the evolution of
+mean strategies for all runs on the same figure.
+
+Defining stages
+---------------
+
+### Evolution stage
+
+Now lets describe the task in Pylightinx terms. From it's point of view, we
+need:
+1. Some number of realizations of the same evolution experiment. In particular,
+   we want to get an access to evolution history files containing the data we are
+   interested in.
+2. A single realization of a summarizing object which depends on, say, last 10
+   realizations of the evolution history. Lets say that Summarizer object should
+   only contain a target figure that we could copypaste into experiment report.
+
+Here is how we define the Evolution object. Pylightnix offers two-phased build
+process, where at the Configuration (first) phase we build a plan of
+computation, check it's configuration and hopefully catch some early errors. At
+the Realization (second) phase we actually execute our plan an obtain build
+artifacts.
+
+Preparation to _Configuration_ is done when we define `Config` object which is
+just a JSON-serailizable Python dict of user-defined values. In our case it is a
+result of `_config()` function.
+
+_Realization_ is representd by `_run_process` and `_run_pool` functions. The
+`_run_pool(b:Build)->None` function is a well-defined Pylightnix `Realizer`
+function which accepts `Build` helper which introduces the following promises:
+- It 'knows' the config we are going to realize. We could ask it by calling
+  `build_cattrs(b)` function.
+- It 'remembers' output directories of our build if we use `build_outpaths(n)`
+  function. In Pylightnix, realizers could produce several realizations at once.
+
+```python
+from ultimatum.base import run1
+from multiprocessing.pool import Pool
+
+def _config()->Config:
+  name='ultimatum'
+  nepoch=30000
+  n=300
+  nrounds=10*30
+  cutoff=0.1
+  version=6
+  nrunners=10
+  return Config(locals())
+
+def _run_process(a:ConfigAttrs, o:Path):
+  run1(cwd=o, nepoch=a.nepoch, n=a.n, nrounds=a.nrounds, cutoff=a.cutoff)
+
+def _run_pool(b:Build)->None:
+  c=build_cattrs(b)
+  p=Pool()
+  p.starmap(_build_process,[(c,o) for o in build_outpaths(b,nouts=c.nrunners)],1)
+```
+
+Now we complete the pylightnix stage definition by calling `mkdrv` where we pass
+both phases as `config` and `realizer` arguments. The third argument is a
+`matcher` which instructs the Pylightnix which realizations to show to
+downstream stages. We already decided that we want last 10 realizations of our
+evolution experiment so we encode this fact by passing appropriate `Matcher`
+value.
+
+```python
+
+def evolution_stage(m:Manager)->DRef:
+  return mkdrv(m, config=_config(), matcher=match_latest(top=10), realizer=build_wrapper(_run_pool))
+```
+
+Now, when we defined evolution stage, we could have run it's realization
+immediately, but let's skip this step for now until we define the whole plan to
+see how does Pylightnix work with dependency resolution.
+
+### Analyzer stage
+
+The second object or stage that we need is the Summarizer. The main thing that
+we need to describe here is the dependency on realizations of Evolution object
+that we defined above.
+
+This is done by including *Derivation references* into stage's configuration.
+Luckily, we almost have one since it is exactly the return value of our
+`evolution_stage`. In order to use it we only need to provide a `Manager` object
+that represents a dependency resolution space. We want both stages to be
+in the same dependency resolution space, so we should pass the same space
+handler to both.
+
+Note the construction `[breed_node(m), 'history.json']` which is known as
+`RefPath`. It consists of derivation reference (a root) and trailing list of
+folder and file names. Pylightnix provides helper functions to dereference such
+paths into real fylesystem paths.
+
+```python
+def summarize_stage(m:Manager)->DRef:
+  def _config()->Config:
+    return Config({
+      'name':'analyzer',
+      'version':3,
+      'history':[breed_node(m), 'history.json']
+    })
+  def _build(b:Build)->None:
+    chdir(build_outpath(b))
+    c=build_cattrs(b)
+
+    fig=plt.figure()
+    ax=fig.add_subplot(1, 1, 1)
+    ax.set_ylabel('mean strategies')
+    ax.grid()
+
+    for nhist,histpath in enumerate(build_paths(b, c.history)):
+      epoches:List[float]=[]; pmeans:List[float]=[]; rmeans:List[float]=[]
+      with open(histpath,'r') as f:
+        epoches,pmeans,rmeans=json_loads(f.read())
+      ax.plot(epoches,pmeans,label=f'pmeans{nhist}',color='blue')
+      ax.plot(epoches,rmeans,label=f'rmeans{nhist}',color='orange')
+    plt.savefig('figure.png')
+  return mkdrv(m, config=_config(), matcher=match_only(), realizer=build_wrapper(_build))
+```
+
+As could be seen, SUmmarizer does it's matplotlib magic and saves `figure.png`
+to the folder that happens to be the output folder of the current stage.
+
+The interesting place here is the call to `build_paths(b, c.history)`. It
+explains how do we access dependencies. Pylightnix promises that such call will
+always complete and return a list of paths, as instructed by the `Matcher` of
+the RefPath's root stage. In our case, `c.history` is a refpath to Evolution
+stage, and Evolution stage published 10 realizations. We get 10 paths, each
+containing it's unique `history.json`.
+
+### Realization
+
+At this point, Pylightinx already could know our plan, which is:
+
+```
+Summarizer -> 10x Evolution
+```
+
+In order to let it actually know it, we call `instantiate`, specifying the stage
+we want to check.
+
+```python
+clo=instantiate(summarize_stage)
+```
+
+Internally, Pylightnix creates the Manager (a resolution space), runs the
+configuration phases of all the stages it meets, and returns a *Closure* of the
+requested stage. This closure have no particular value for the programmer except
+the possibility to realizing it.
+
+```python
+rref=realize(clo)
+```
+
+And that is the place where the actual work starts. Pylightnix first runs
+realizer of evolution stage to obtain it's 10 realizations, and then runs the
+summarizer.
+
+Realization reference looks like
+
+```python
+print(rref)
+```
+
+and could be converted to system path either explicitly
+
+```python
+print(rref2path(rref))
+```
+
+... or implicitly, as I did while writing this tutorial. Here is the desired
+figure:
+
+<TODO>
+
+Happy hacking!
+
+

@@ -199,20 +199,21 @@ And that is the place where the actual work starts. Pylightnix first runs
 realizer of evolution stage to obtain it's 10 realizations, and then runs the
 summarizer.
 
-Realization reference looks like
+Realization reference looks like this:
 
 ```python
 print(rref)
 ```
 
-and could be converted to system path either explicitly
+It has a good property of that it could be converted to system path:
 
 ```python
 print(rref2path(rref))
 ```
 
-... or implicitly, as I did while writing this tutorial. Here is the desired
-figure:
+For example, we could instruct tools like Pwave to include `figure.png` into
+experiment reports. I did exactly that while writing this tutorial so we could
+now see the real image here:
 
 <TODO>
 

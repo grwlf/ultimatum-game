@@ -3,7 +3,7 @@
 } :
 let
 
-  py = pkgs.python36Packages;
+  py = pkgs.python37Packages;
   pyls = py.python-language-server.override { providers=["pyflakes"]; };
   pyls-mypy = py.pyls-mypy.override { python-language-server=pyls; };
 
@@ -49,6 +49,8 @@ let
         numpy
         tqdm
         scipy
+        Pweave
+        gnumake
 
         # pylightnix_head
         pylightnix_dev

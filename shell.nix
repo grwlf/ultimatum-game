@@ -8,9 +8,32 @@ let
   pyls-mypy = py.pyls-mypy.override { python-language-server=pyls; };
 
 
-  pylightnix_dev = import ../stagedml/3rdparty/pylightnix { inherit pkgs; doCheck = false; };
+  my-python-packages = python-packages: with python-packages; [
+    ipython
+    hypothesis
+    pytest
+    pytest-mypy
+    Pweave
+    coverage
 
-  pylightnix_head = py.buildPythonPackage rec {
+    jupyter
+    matplotlib
+    numpy
+    tqdm
+    scipy
+    # pylightnix_dev
+    # pylightnix_head
+  ];
+
+  python-with-my-packages = pkgs.python37.withPackages my-python-packages;
+
+  pylightnix_dev = import ../stagedml/3rdparty/pylightnix {
+    inherit pkgs;
+    python = pkgs.python37Packages;
+    doCheck = false;
+  };
+
+  pylightnix_head = python-with-my-packages.buildPythonPackage rec {
     pname = "pylightinx";
     version = "0.0.3";
 
@@ -29,32 +52,15 @@ let
   };
 
 
-
   env = stdenv.mkDerivation {
     name = "buildenv";
     buildInputs =
-      (with py;[
-        ipython
+      [
         pyls-mypy
         pyls
-        hypothesis
-        pytest
-        pytest-mypy
-        Pweave
-        coverage
-
-        ipython
-        jupyter
-        matplotlib
-        numpy
-        tqdm
-        scipy
-        Pweave
-        gnumake
-
-        # pylightnix_head
+        python-with-my-packages
         pylightnix_dev
-      ]) ++ (with pkgs;[ gnumake ]);
+      ] ++ (with pkgs;[ gnumake ]);
 
     shellHook = with pkgs; ''
       export CWD=`pwd`

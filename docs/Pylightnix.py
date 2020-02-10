@@ -5,10 +5,9 @@ from os.path import join
 from typing import List, Optional
 
 from pylightnix import (
-  Config, Manager, Build, DRef, RRef, ConfigAttrs, Closure, mkdrv, instantiate,
-  realizeMany, build_cattrs, build_wrapper, match_all, build_outpaths, Path,
-  config_dict, build_config, store_initialize, match_latest, build_paths,
-  build_outpath, realize, rref2path, mkconfig )
+  Config, Manager, Build, DRef, RRef, ConfigAttrs, Closure, Path, mkdrv,
+  instantiate, build_cattrs, build_wrapper, build_outpaths, store_initialize,
+  match_latest, build_paths, build_outpath, realize, rref2path, mkconfig )
 
 store_initialize('/tmp/ultimatum', '/tmp')
 
@@ -40,13 +39,13 @@ def evolution_stage(m:Manager)->DRef:
 
 import matplotlib.pyplot as plt
 
-def summarize_config(evolution:DRef)->Config:
-  name = 'analyzer'
-  version = 3
+def summary_config(evolution:DRef)->Config:
+  name = 'summary'
+  version = 6
   history_refpath = [evolution, 'history.json']
   return mkconfig(locals())
 
-def summarize_build(b:Build)->None:
+def summary_realize(b:Build)->None:
   cwd=getcwd()
   try:
     chdir(build_outpath(b))
@@ -61,18 +60,25 @@ def summarize_build(b:Build)->None:
       epoches:List[float]=[]; pmeans:List[float]=[]; rmeans:List[float]=[]
       with open(histpath,'r') as f:
         epoches,pmeans,rmeans=json_loads(f.read())
-      ax.plot(epoches,pmeans,label=f'pmeans{nhist}',color='blue')
-      ax.plot(epoches,rmeans,label=f'rmeans{nhist}',color='orange')
+      if nhist==0:
+        pargs={'label':'Proposer mean'}
+        rargs={'label':'Responder mean'}
+      else:
+        pargs={}; rargs={}
+      ax.plot(epoches,pmeans,color='blue',**pargs)
+      ax.plot(epoches,rmeans,color='orange',**rargs)
     plt.savefig('figure.png')
+
+    ax.legend(loc='upper right')
   finally:
     chdir(cwd)
 
-def summarize_stage(m:Manager)->DRef:
-  return mkdrv(m, config=summarize_config(evolution_stage(m)),
+def summary_stage(m:Manager)->DRef:
+  return mkdrv(m, config=summary_config(evolution_stage(m)),
                   matcher=match_latest(),
-                  realizer=build_wrapper(summarize_build))
+                  realizer=build_wrapper(summary_realize))
 
-clo:Closure=instantiate(summarize_stage)
+clo:Closure=instantiate(summary_stage)
 
 rref:RRef=realize(clo)
 

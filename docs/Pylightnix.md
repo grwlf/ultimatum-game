@@ -1,30 +1,39 @@
-Ultimatum gmae experiment with Pylightnix
+Ultimatum game experiment with Pylightnix
 =========================================
 
-[Full source here](./Pylightnix.py)
+[Full source](./Pylightnix.py)
 
-TODO: Describe the [Ultimatum game](https://en.wikipedia.org/wiki/Ultimatum_game).
+This tutorial demonstrates how to use
+[Pylightnix](https://github.com/stagedml/pylightnix) framework to run simple
+experiment, in which we search evolutionary-stable strategy for the [Ultimatum
+game](https://en.wikipedia.org/wiki/Ultimatum_game) by simulating the evolution
+of playing agents.
+
+In this simulation, agents will repeatedly play the Ultimatum game in two roles
+('Proposer' and 'Responder'). They have different strategies for each role and
+common fitness function. Both agent's strategies are the subjects for evolution.
+
+**In this tutorial, our goal is to run 10 iterations of this experiment and
+display mean strategy evolution for both roles on the same figure (20 lines
+total).**
 
 Planning the experiment
 -----------------------
 
 The function we are mostly interested in, is defined in `src/ultimatum/base.py`
-module and has the following type signature:
+module and has the following signature:
 
 `def run1(cwd:str, nepoch=30000, n=300, nrounds=10*30, cutoff=0.1)->None`
 
-As may be seen in body, it runs a single instance of evolution process for the
-Ultimatum game. By default, it runs `30K` epoches on a population of `300`
-individuals. `nrounds` and `cutoff` define minor details of the algorithm.
+As may be seen in it's body, it runs a single pass of evolution. By default, it
+runs `30K` epochs on a population of `300` individuals. `nrounds` and `cutoff`
+define minor details of the algorithm.
 
 Before return, `run1` stores results in a directory, specified by it's `cwd`
-argument. In particular, `history.json` file would contain information on
-evolution of mean strategies of 2 game roles (proposer and responder). For every
-evolution step, history will have two floats, representing mean shares that
-agents 'want' to own when participating the game.
-
-**In this tutorial, our goal is to run 10 iterations of `run1` algorithm and
-display evolution of mean agent strategies on the same figure.**
+argument. In particular, `history.json` file would contain data on mean
+strategies for every epoch. Namely, it will have two floats, representing mean
+shares that agents 'want' to own when participating the game as proposer and as
+responder.
 
 Preparation
 -----------
@@ -41,16 +50,16 @@ from typing import List, Optional
 
 
 
-Next, lets become sure that Pylightnix storage is initialized in a separate
-place. `store_initialize` would initialize it for us if it is not present.
+Next, lets import Pylightnix API types and function we will need and become sure
+that Pylightnix storage is initialized. `store_initialize` would initialize it
+for us if it doesn't exist.
 
 
 ```python
 from pylightnix import (
-  Config, Manager, Build, DRef, RRef, ConfigAttrs, Closure, mkdrv, instantiate,
-  realizeMany, build_cattrs, build_wrapper, match_all, build_outpaths, Path,
-  config_dict, build_config, store_initialize, match_latest, build_paths,
-  build_outpath, realize, rref2path, mkconfig )
+  Config, Manager, Build, DRef, RRef, ConfigAttrs, Closure, Path, mkdrv,
+  instantiate, build_cattrs, build_wrapper, build_outpaths, store_initialize,
+  match_latest, build_paths, build_outpath, realize, rref2path, mkconfig )
 
 store_initialize('/tmp/ultimatum', '/tmp')
 ```
@@ -61,38 +70,50 @@ Initializing existing /tmp/ultimatum
 
 
 
-Defining stages
----------------
+Implementation
+--------------
 
-Lets describe the task in Pylightinx terms. From it's point of view, we
-need:
+Lets re-state the task in Pylightinx' terms. We may say that we want to perform
+a long calculation so splitting it into a sequence of steps is probably a good
+idea. At each step we could cache results on disk and probably save some time if
+something go wrong by not re-running the whole experiment from the beginning.
 
-1. Some number of realizations of the same *Evolution* experiment. In particular,
-   we want to get an access to evolution history files containing the data we are
-   interested in.
-2. A single realization of a *Summarizing* object which depends on, say, last 10
-   realizations of the evolution history. Lets say that Summarizer object should
-   only contain a target figure that we could copypaste into experiment report.
+In Pylightnix we use term *Stage* to name individual step of calculation, it's
+configuration and the calculating procedure. Results of calculation are called
+*Realization*. We may think that stage is a synonym of OOP class and stage
+realizations are similar to class objects. The difference is that stage stores
+part of it's data in the filesystem storage.
 
-#### Evolution stage
+Plotting the Ultimatum evolution is a rather simple task which requires two
+stages:
+
+1. *Evolution* stage which doesn't depend on any other stage. It's realizations
+   should contain `history.json` files produced by `run1` runs.
+2. *Summary* stage, a single realization of which depends on the last 10
+   realizations of the Evolution stage. In this tutorial, Summary's realization
+   will only contain a PNG picture that could be directly copy-pasted into
+   experiment reports.
+
+#### Defining Evolution stage
 
 Here is how we define the Evolution object. Pylightnix offers two-phased build
-process, in wich it first reads the plan of computation, and only after that
-actually executes it to obtain the desired build artifacts.  Tho-phased design
-allows us to check configurations and hopefully catch some early errors.
+process, in which it reads the plan of computation, and after that actually
+executes it to produce the desired build artifacts. This design allows us
+to check configurations quickly and hopefully catch early errors.
 
-From programmer's point of view, we are to provide two pieces of data:
+From the programmer's point of view, we are to provide Pylightnix with two
+entities:
 
- * _Config_  object which is a JSON-serailizable Python dict with user-defined
-   values. In our case it is the result of `evolution_config()` function.
+ * JSON-serializable _Config_  object which is a Python dictionary with
+   user-defined values. (see `evolution_config` below).
  * _Realizer_ function which accepts `Build` helper object and by that relies
    on the following promises given by Pylightnix:
     - We already know config we are going to realize (see `build_cattrs`).
     - We have already realized all the dependencies (see `build_paths` of the
-      Summarizer stage).
-    - We already know output directories which we could ask and use for putting
-      artifacts (see `build_outpaths`). Note, in Pylightnix, realizers could produce several
-      realizations at once.
+      Summary stage).
+    - We are free to create one or more output directories for putting
+      artifacts (see `build_outpaths`). Each output directory will be converted
+      to stage realization by Pylightnix.
 
 
 ```python
@@ -121,7 +142,7 @@ def evolution_realize(b:Build)->None:
 
 
 Now we complete the pylightnix stage definition by calling `mkdrv` where we pass
-both phases in it's `config` and `realizer` arguments. The third argument is a
+both entities as `config` and `realizer` arguments. The third argument is a
 `matcher` which instructs Pylightnix how to choose realizations to pass to
 downstream stages. Earlier we decided that we want 10 newest realizations of our
 evolution experiment so we encode this fact now by calling the `match_latest`
@@ -139,39 +160,25 @@ def evolution_stage(m:Manager)->DRef:
 
 Now, when we have defined our first stage, we could have run it's realization
 immediately, but it is not necessary because Pylightnix will execute it later
-when it start it's work with dependencies.
+in the process of dependency resolution.
 
-#### Summarizer stage
+#### Defining Summary stage
 
-The second object (the stage) that we need is Summarizer. An important thing
-that we should encode here is the dependency on realizations of Evolution
-object that we defined above.
-
-This could be done by including Evolution's *Derivation reference* into the
-configuration of Summarizer stage. Pylightnix scans configurations of it's
-stages so it is able to produce correct list of dependencies.
-
-In order to get the reference, we have to call `evolution_stage` by passing it
-the right `Manager` argument. In Pylightnix, `Manager`s represent dependency
-resolution spaces.  We normally want our stages to be in the same dependency
-resolution space, so we pass the same Manager from one stage to another.
-
-Note also the `[evolution, 'history.json']` value which is known as a `RefPath`
-object. It is a Python list consisting of a derivation reference head (a root)
-and folders/file names tail. Pylightnix provides `build_paths` function to
-dereference such refpaths into one or many real fylesystem paths.
+The second stage that we need is a Summary. An important thing that we should
+encode here is the dependency on Evolution realizations. The whole code of the
+stage is shown below:
 
 
 ```python
 import matplotlib.pyplot as plt
 
-def summarize_config(evolution:DRef)->Config:
-  name = 'analyzer'
-  version = 3
+def summary_config(evolution:DRef)->Config:
+  name = 'summary'
+  version = 6
   history_refpath = [evolution, 'history.json']
   return mkconfig(locals())
 
-def summarize_build(b:Build)->None:
+def summary_realize(b:Build)->None:
   cwd=getcwd()
   try:
     chdir(build_outpath(b))
@@ -186,54 +193,79 @@ def summarize_build(b:Build)->None:
       epoches:List[float]=[]; pmeans:List[float]=[]; rmeans:List[float]=[]
       with open(histpath,'r') as f:
         epoches,pmeans,rmeans=json_loads(f.read())
-      ax.plot(epoches,pmeans,label=f'pmeans{nhist}',color='blue')
-      ax.plot(epoches,rmeans,label=f'rmeans{nhist}',color='orange')
+      if nhist==0:
+        pargs={'label':'Proposer mean'}
+        rargs={'label':'Responder mean'}
+      else:
+        pargs={}; rargs={}
+      ax.plot(epoches,pmeans,color='blue',**pargs)
+      ax.plot(epoches,rmeans,color='orange',**rargs)
     plt.savefig('figure.png')
+
+    ax.legend(loc='upper right')
   finally:
     chdir(cwd)
 
-def summarize_stage(m:Manager)->DRef:
-  return mkdrv(m, config=summarize_config(evolution_stage(m)),
+def summary_stage(m:Manager)->DRef:
+  return mkdrv(m, config=summary_config(evolution_stage(m)),
                   matcher=match_latest(),
-                  realizer=build_wrapper(summarize_build))
+                  realizer=build_wrapper(summary_realize))
 ```
 
 
 
-The interesting place here is the call to `build_paths(b, c.history)`. It
-explains how do we access dependencies. Pylightnix promises that such call will
-always complete and return a list of paths, as instructed by the `Matcher` of
-the RefPath's root stage. In our case, `c.history_refpath` points to Evolution
-stage's newest histories. We get 10 paths, each containing it's unique
-`history.json`.
+We encode the  Evolution dependency by including it's *Derivation reference* (of
+type `DRef`) into the stage configuration. Pylightnix scans configurations so it
+is able to extract the list of dependencies later. Derivation references are
+strings, one example is 'dref:86ce1852b0f4f529c40a98f043ac1804-ultimatum'. We see that
+DRef contains a hash which captures configuration of a stage, and a
+user-friendly name.
 
-As we can see in code, Summarizer does it's matplotlib magic and saves
-`figure.png` to the folder that happens to be the output folder of the current
-stage.
+DRefs are produced by stage functions directly, so we have to call
+`evolution_stage` in order add it as a dependency. In Pylightnix, stages accept
+one mandatory argument of type *Manager*, which represents dependency resolution
+spaces. We normally want all our stages to be in the same dependency resolution
+space, so we pass the same Manager from one stage to another.
 
-#### Realization
+Note also the `[evolution, 'history.json']` expression which is called a
+`RefPath`. It is a Python list of strings, where the first element is a
+derivation reference and the rest are file/folder names. Pylightnix has a
+helper function `build_paths` to resolve refpaths into one or many real
+fylesystem paths.
 
-At this point, Pylightinx is ready to know our full plan, which looks like:
+In the above code we do use `build_paths` to actually access the dependencies.
+Pylightnix promises that for every DRef listed in stage's configuration, the
+call to `build_paths` returns valid system paths. In our case, we get 10
+folder paths, each folder containing it's unique `history.json` file.
+
+As we can see in code, Summary stage does it's matplotlib magic and saves
+`figure.png` to the folder that happens to be the output folder
+(`build_outpath`) of the current stage.
+
+#### Running the experiment
+
+All stages are now defined and Pylightinx is ready to process our plan, which
+now looks like:
 
 ```
-1. Get 10 copies of Evolution
-2. Get 1 copy of Summarizer
+1. Get 10 realizations of the Evolution stage
+2. Get 1 realization of the Summary stage
 ```
 
-In order to let it actually understand it, we call `instantiate` function,
-where we specify the stage we want to reach.
+To compile it, we call `instantiate` function, where we specify the stage we
+want to reach.
 
 
 ```python
-clo:Closure=instantiate(summarize_stage)
+clo:Closure=instantiate(summary_stage)
 ```
 
 
 
-Internally, Pylightnix creates the *Manager* (a resolution space), runs the
-configuration phases of all the stages it meets, and returns a *Closure* of the
-requested stage. This closure have no particular value for the programmer except
-the possibility of realizing it.
+Internally, Pylightnix creates the `Manager`, runs the configuration phases of
+all the stages it meets, and returns a *Closure* of the requested stage.
+Closures have no particular value for the user by itself.  The only meaningful
+thing we could do is to realize them:
 
 
 ```python
@@ -242,12 +274,16 @@ rref:RRef=realize(clo)
 
 
 
-Realize is the place where the actual work starts. In realize, Pylightnix
+Realize is the place where we do all the job. In this function Pylightnix
 determines whether we have required realizations in the storage or not. If not,
 it runs realizers in the right sequence. In our case, it will run evolution
-stage to obtain the desired number of realizations, and then run the summarizer.
+stage's realizer to obtain the desired number of realizations, and the
+Summary to plot them on a single figure.
 
-The result of this process is a *realization reference* which looks like this:
+The result of the whole process is a *realization reference* (of type `RRef`). Note,
+that `realize` is a simplified function for the single-realization case. For
+generic case we have `realizeMany` function which returns a list of many
+realizations. Let's see what does realization reference looks like:
 
 
 ```python
@@ -255,12 +291,17 @@ print(rref)
 ```
 
 ```
-rref:1187a83d1366ebdd411ec945d3c7cf0b-15916de4c76ec240e88e03f819db20be-analyzer
+rref:1187a83d1366ebdd411ec945d3c7cf0b-9b14c9d924e5e1a2701b5946daff98c3-summary
 ```
 
 
 
-It has a good property that we could always convert it to a system path:
+We see a string containing two hashes and a user-friendly name. The rightmost
+hash captures the same thing that DRef does: stage configuration plus links to
+dependencies. The leftmost hash captures build artifacts of a particular
+realization.
+
+RRefs have a good property that we could always convert them to system paths:
 
 
 ```python
@@ -268,14 +309,14 @@ print(rref2path(rref))
 ```
 
 ```
-/tmp/ultimatum/15916de4c76ec240e88e03f819db20be-analyzer/1187a83d1366ebdd411ec945d3c7cf0b
+/tmp/ultimatum/9b14c9d924e5e1a2701b5946daff98c3-summary/1187a83d1366ebdd411ec945d3c7cf0b
 ```
 
 
 
-To inspect the content of our realization, we could just list the folder it
-points to. Alternatively we could use one of small shell-like helpers, defined in
-Pylightnix:
+To inspect the content of our realization, we could just list it's folder in the
+filesystem. Alternatively we could use one of small shell-like helpers, defined
+in Pylightnix:
 
 
 ```python
@@ -290,12 +331,33 @@ print(lsref(rref))
 
 
 
-Later we could instruct rendering tools to include `figure.png` into
-our experiment report, like this:
+Typical realization contains the following files:
+
+- Build timestamp (not included into realization hash)
+- Realization context, which tells us how the dependencies was resolved.
+- User-defined build artifacts, in this case it is a single image named
+  `figure.png`.
+
+Now we may instruct rendering tools to include `figure.png` into experiment
+reports. I use PWeave to prepare this tutorial, so I am asking it to
+insert this image here:
 
 
 ![](figures/Pylightnix_figure11_1.png)\
 
+
+Conclusion
+----------
+
+Thanks to Pylightnix, we did:
+
+- Split the experiment in linked parts and run early-check of it's
+  configurations.
+- Cache intermediate and final results in the filesystem.
+- Add only a small overhead in terms of both code size and technologies
+  employed.
+
+The full Python source of this tutorial is [here](./Pylightnix.py).
 
 Happy hacking!
 

@@ -8,29 +8,28 @@ TODO: Describe the [Ultimatum game](https://en.wikipedia.org/wiki/Ultimatum_game
 Planning the experiment
 -----------------------
 
-Now to the experiment: the function we are mostly interested in, is defined in
-`src/ultimatum/base.py` module and has the following type signature:
+The function we are mostly interested in, is defined in `src/ultimatum/base.py`
+module and has the following type signature:
 
 `def run1(cwd:str, nepoch=30000, n=300, nrounds=10*30, cutoff=0.1)->None`
 
-As may be seen in it's body, this function runs a single instance of evolution
-process for the Ultimatum game. By default, it runs `30K` epoches of evolution
-on a population of `300` individuals. `nrounds` and `cutoff` define minor
-details of the algorithm.
+As may be seen in body, it runs a single instance of evolution process for the
+Ultimatum game. By default, it runs `30K` epoches on a population of `300`
+individuals. `nrounds` and `cutoff` define minor details of the algorithm.
 
-Before return, `run1` stores `history.json` and `evolution.png`
-files in a directory, specified in `cwd` argument. For every epoch of the
-evolution, History file would contain information on mean strategies of 2 game
-roles (proposer and responder). This information consists of two floats,
-representing shares that agents 'want' to own when participating the game.
+Before return, `run1` stores results in a directory, specified by it's `cwd`
+argument. In particular, `history.json` file would contain information on
+evolution of mean strategies of 2 game roles (proposer and responder). For every
+evolution step, history will have two floats, representing mean shares that
+agents 'want' to own when participating the game.
 
-Our goal is to run 10 iterations of this algorithm and display the evolution of
-mean strategies for all of them.
+**In this tutorial, our goal is to run 10 iterations of `run1` algorithm and
+display evolution of mean agent strategies on the same figure.**
 
 Preparation
 -----------
 
-Lets import various system functions in advance.
+Lets import some system functions the we will need in advance.
 
 
 ```python

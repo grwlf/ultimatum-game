@@ -15,21 +15,21 @@ from ultimatum.base import run1
 from multiprocessing.pool import Pool
 
 def evolution_config()->Config:
-  name='ultimatum'
-  nepoch=30000
-  n=300
-  nrounds=10*30
-  cutoff=0.1
-  version=6
-  nrunners=10
+  name = 'ultimatum'
+  nepoch = 30000
+  n = 300
+  nrounds = 10*30
+  cutoff = 0.1
+  version = 6
+  nrunners = 10
   return mkconfig(locals())
 
 def _run_process(a:ConfigAttrs, o:Path):
   run1(cwd=o, nepoch=a.nepoch, n=a.n, nrounds=a.nrounds, cutoff=a.cutoff)
 
 def evolution_realize(b:Build)->None:
-  c=build_cattrs(b)
-  p=Pool()
+  c = build_cattrs(b)
+  p = Pool()
   p.starmap(_run_process,[(c,o) for o in build_outpaths(b,nouts=c.nrunners)],1)
 
 def evolution_stage(m:Manager)->DRef:
@@ -41,18 +41,17 @@ import matplotlib.pyplot as plt
 
 def summary_config(evolution:DRef)->Config:
   name = 'summary'
-  version = 6
   history_refpath = [evolution, 'history.json']
   return mkconfig(locals())
 
 def summary_realize(b:Build)->None:
-  cwd=getcwd()
+  cwd = getcwd()
   try:
     chdir(build_outpath(b))
-    c=build_cattrs(b)
+    c = build_cattrs(b)
 
-    fig=plt.figure()
-    ax=fig.add_subplot(1, 1, 1)
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
     ax.set_ylabel('mean strategies')
     ax.grid()
 
@@ -61,10 +60,10 @@ def summary_realize(b:Build)->None:
       with open(histpath,'r') as f:
         epoches,pmeans,rmeans=json_loads(f.read())
       if nhist==0:
-        pargs={'label':'Proposer mean'}
-        rargs={'label':'Responder mean'}
+        pargs = {'label':'Proposer mean'}
+        rargs = {'label':'Responder mean'}
       else:
-        pargs={}; rargs={}
+        pargs = {}; rargs = {}
       ax.plot(epoches,pmeans,color='blue',**pargs)
       ax.plot(epoches,rmeans,color='orange',**rargs)
     plt.savefig('figure.png')
@@ -78,9 +77,9 @@ def summary_stage(m:Manager)->DRef:
                   matcher=match_latest(),
                   realizer=build_wrapper(summary_realize))
 
-clo:Closure=instantiate(summary_stage)
+clo:Closure = instantiate(summary_stage)
 
-rref:RRef=realize(clo)
+rref:RRef = realize(clo)
 
 print(rref)
 

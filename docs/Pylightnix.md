@@ -9,23 +9,23 @@ Planning the experiment
 -----------------------
 
 Now to the experiment: the function we are mostly interested in, is defined in
-`ultimatum.base` file and has the following type signature:
+`src/ultimatum/base.py` module and has the following type signature:
 
 `def run1(cwd:str, nepoch=30000, n=300, nrounds=10*30, cutoff=0.1)->None`
 
-This function runs a single instance of evolutionary model of the Ultimatum
-game. By default, it runs `30K` epoches of evolution on a population of `300`
-individuals. `nrounds` and `cutoff` are hyperparamethers which defines minor
-details of our evolution algorithm.
+As may be seen in it's body, this function runs a single instance of evolution
+process for the Ultimatum game. By default, it runs `30K` epoches of evolution
+on a population of `300` individuals. `nrounds` and `cutoff` define minor
+details of the algorithm.
 
-As may be seen in it's code, `run1` stores `history.json` and `evolution.png`
+Before return, `run1` stores `history.json` and `evolution.png`
 files in a directory, specified in `cwd` argument. For every epoch of the
 evolution, History file would contain information on mean strategies of 2 game
 roles (proposer and responder). This information consists of two floats,
 representing shares that agents 'want' to own when participating the game.
 
 Our goal is to run 10 iterations of this algorithm and display the evolution of
-mean strategies for all runs on the same figure.
+mean strategies for all of them.
 
 Preparation
 -----------
@@ -123,9 +123,9 @@ def evolution_realize(b:Build)->None:
 
 Now we complete the pylightnix stage definition by calling `mkdrv` where we pass
 both phases in it's `config` and `realizer` arguments. The third argument is a
-`matcher` which instructs the Pylightnix which realizations to pass to
-downstream stages. We already decided that we want 10 newest realizations of our
-evolution experiment so we encode this fact by calling the `match_latest`
+`matcher` which instructs Pylightnix how to choose realizations to pass to
+downstream stages. Earlier we decided that we want 10 newest realizations of our
+evolution experiment so we encode this fact now by calling the `match_latest`
 matcher with appropriate parameter:
 
 
@@ -138,25 +138,24 @@ def evolution_stage(m:Manager)->DRef:
 
 
 
-Now, when we defined our first stage, we could have run it's realization
+Now, when we have defined our first stage, we could have run it's realization
 immediately, but it is not necessary because Pylightnix will execute it later
 when it start it's work with dependencies.
 
 #### Summarizer stage
 
 The second object (the stage) that we need is Summarizer. An important thing
-that we need to encode in it is the dependency on realizations of Evolution
+that we should encode here is the dependency on realizations of Evolution
 object that we defined above.
 
-This could be done by including Evolution's *Derivation reference* into
-Summarizer's configuration. Pylightnix will scan the config and include it into
-a list of dependencies.
+This could be done by including Evolution's *Derivation reference* into the
+configuration of Summarizer stage. Pylightnix scans configurations of it's
+stages so it is able to produce correct list of dependencies.
 
-In order to get the desired derivation reference, we have to call
-`evolution_stage` with the right `Manager` argument. `Manager`s represent
-dependency resolution spaces. We want our both stages to be in the same
-dependency resolution space, so we make sure pass that both of them use the same
-Manager.
+In order to get the reference, we have to call `evolution_stage` by passing it
+the right `Manager` argument. In Pylightnix, `Manager`s represent dependency
+resolution spaces.  We normally want our stages to be in the same dependency
+resolution space, so we pass the same Manager from one stage to another.
 
 Note also the `[evolution, 'history.json']` value which is known as a `RefPath`
 object. It is a Python list consisting of a derivation reference head (a root)
@@ -275,8 +274,9 @@ print(rref2path(rref))
 
 
 
-To inspect content of the realization, we just list the folder it points to.
-Also we could use one of small shell-like helpers, defined in Pylightnix:
+To inspect the content of our realization, we could just list the folder it
+points to. Alternatively we could use one of small shell-like helpers, defined in
+Pylightnix:
 
 
 ```python
@@ -292,7 +292,7 @@ print(lsref(rref))
 
 
 Later we could instruct rendering tools to include `figure.png` into
-our experiment report. I did exactly that while writing this tutorial:
+our experiment report, like this:
 
 
 ![](figures/Pylightnix_figure11_1.png)\

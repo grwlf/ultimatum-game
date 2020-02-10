@@ -9,23 +9,23 @@ Planning the experiment
 -----------------------
 
 Now to the experiment: the function we are mostly interested in, is defined in
-`ultimatum.base` file and has the following type signature:
+`src/ultimatum/base.py` module and has the following type signature:
 
 `def run1(cwd:str, nepoch=30000, n=300, nrounds=10*30, cutoff=0.1)->None`
 
-This function runs a single instance of evolutionary model of the Ultimatum
-game. By default, it runs `30K` epoches of evolution on a population of `300`
-individuals. `nrounds` and `cutoff` are hyperparamethers which defines minor
-details of our evolution algorithm.
+As may be seen in it's body, this function runs a single instance of evolution
+process for the Ultimatum game. By default, it runs `30K` epoches of evolution
+on a population of `300` individuals. `nrounds` and `cutoff` define minor
+details of the algorithm.
 
-As may be seen in it's code, `run1` stores `history.json` and `evolution.png`
+Before return, `run1` stores `history.json` and `evolution.png`
 files in a directory, specified in `cwd` argument. For every epoch of the
 evolution, History file would contain information on mean strategies of 2 game
 roles (proposer and responder). This information consists of two floats,
 representing shares that agents 'want' to own when participating the game.
 
 Our goal is to run 10 iterations of this algorithm and display the evolution of
-mean strategies for all runs on the same figure.
+mean strategies for all of them.
 
 Preparation
 -----------
@@ -235,8 +235,9 @@ It has a good property that we could always convert it to a system path:
 print(rref2path(rref))
 ```
 
-To inspect content of the realization, we just list the folder it points to.
-Also we could use one of small shell-like helpers, defined in Pylightnix:
+To inspect the content of our realization, we could just list the folder it
+points to. Alternatively we could use one of small shell-like helpers, defined in
+Pylightnix:
 
 ```python
 from pylightnix import lsref
@@ -245,7 +246,7 @@ print(lsref(rref))
 ```
 
 Later we could instruct rendering tools to include `figure.png` into
-our experiment report. I did exactly that while writing this tutorial:
+our experiment report, like this:
 
 ```python, echo=False
 realize(clo, force_rebuild=[clo.dref])

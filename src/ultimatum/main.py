@@ -1,4 +1,4 @@
-from ultimatum import runI, run1
+from ultimatum.base import run1
 
 from pylightnix import ( Config, Manager, Build, DRef, RRef, ConfigAttrs,
     mkdrv, instantiate, realizeMany, build_cattrs, build_wrapper, match_all,
@@ -32,7 +32,7 @@ def breed_node(m:Manager)->DRef:
   return mkdrv(m, config=_config(), matcher=match_all(), realizer=build_wrapper(_build))
 
 
-def analyze_node(m:Manager)->DRef:
+def summarize_node(m:Manager)->DRef:
   def _config()->Config:
     return Config({
       'name':'analyzer',

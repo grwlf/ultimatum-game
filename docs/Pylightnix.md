@@ -32,6 +32,7 @@ Preparation
 
 Lets import various system functions in advance.
 
+
 ```python
 from json import loads as json_loads, dumps as json_dumps
 from os import getcwd, chdir
@@ -39,8 +40,11 @@ from os.path import join
 from typing import List, Optional
 ```
 
+
+
 Next, lets become sure that Pylightnix storage is initialized in a separate
 place. `store_initialize` would initialize it for us if it is not present.
+
 
 ```python
 from pylightnix import (
@@ -51,6 +55,12 @@ from pylightnix import (
 
 store_initialize('/tmp/ultimatum', '/tmp')
 ```
+
+```
+Initializing existing /tmp/ultimatum
+```
+
+
 
 Defining stages
 ---------------
@@ -85,6 +95,7 @@ From programmer's point of view, we are to provide two pieces of data:
       artifacts (see `build_outpaths`). Note, in Pylightnix, realizers could produce several
       realizations at once.
 
+
 ```python
 from ultimatum.base import run1
 from multiprocessing.pool import Pool
@@ -108,12 +119,15 @@ def evolution_realize(b:Build)->None:
   p.starmap(_run_process,[(c,o) for o in build_outpaths(b,nouts=c.nrunners)],1)
 ```
 
+
+
 Now we complete the pylightnix stage definition by calling `mkdrv` where we pass
 both phases in it's `config` and `realizer` arguments. The third argument is a
-`matcher` which instructs Pylightnix how to choose realizations to pass to
-downstream stages. Earlier we decided that we want 10 newest realizations of our
-evolution experiment so we encode this fact now by calling the `match_latest`
+`matcher` which instructs the Pylightnix which realizations to pass to
+downstream stages. We already decided that we want 10 newest realizations of our
+evolution experiment so we encode this fact by calling the `match_latest`
 matcher with appropriate parameter:
+
 
 ```python
 def evolution_stage(m:Manager)->DRef:
@@ -122,29 +136,33 @@ def evolution_stage(m:Manager)->DRef:
                   realizer=build_wrapper(evolution_realize))
 ```
 
-Now, when we have defined our first stage, we could have run it's realization
+
+
+Now, when we defined our first stage, we could have run it's realization
 immediately, but it is not necessary because Pylightnix will execute it later
 when it start it's work with dependencies.
 
 #### Summarizer stage
 
 The second object (the stage) that we need is Summarizer. An important thing
-that we should encode here is the dependency on realizations of Evolution
+that we need to encode in it is the dependency on realizations of Evolution
 object that we defined above.
 
-This could be done by including Evolution's *Derivation reference* into the
-configuration of Summarizer stage. Pylightnix scans configurations of it's
-stages so it is able to produce correct list of dependencies.
+This could be done by including Evolution's *Derivation reference* into
+Summarizer's configuration. Pylightnix will scan the config and include it into
+a list of dependencies.
 
-In order to get the reference, we have to call `evolution_stage` by passing it
-the right `Manager` argument. In Pylightnix, `Manager`s represent dependency
-resolution spaces.  We normally want our stages to be in the same dependency
-resolution space, so we pass the same Manager from one stage to another.
+In order to get the desired derivation reference, we have to call
+`evolution_stage` with the right `Manager` argument. `Manager`s represent
+dependency resolution spaces. We want our both stages to be in the same
+dependency resolution space, so we make sure pass that both of them use the same
+Manager.
 
 Note also the `[evolution, 'history.json']` value which is known as a `RefPath`
 object. It is a Python list consisting of a derivation reference head (a root)
 and folders/file names tail. Pylightnix provides `build_paths` function to
 dereference such refpaths into one or many real fylesystem paths.
+
 
 ```python
 import matplotlib.pyplot as plt
@@ -182,6 +200,8 @@ def summarize_stage(m:Manager)->DRef:
                   realizer=build_wrapper(summarize_build))
 ```
 
+
+
 The interesting place here is the call to `build_paths(b, c.history)`. It
 explains how do we access dependencies. Pylightnix promises that such call will
 always complete and return a list of paths, as instructed by the `Matcher` of
@@ -205,18 +225,24 @@ At this point, Pylightinx is ready to know our full plan, which looks like:
 In order to let it actually understand it, we call `instantiate` function,
 where we specify the stage we want to reach.
 
+
 ```python
 clo:Closure=instantiate(summarize_stage)
 ```
+
+
 
 Internally, Pylightnix creates the *Manager* (a resolution space), runs the
 configuration phases of all the stages it meets, and returns a *Closure* of the
 requested stage. This closure have no particular value for the programmer except
 the possibility of realizing it.
 
-```python, wrap=False
+
+```python
 rref:RRef=realize(clo)
 ```
+
+
 
 Realize is the place where the actual work starts. In realize, Pylightnix
 determines whether we have required realizations in the storage or not. If not,
@@ -225,18 +251,33 @@ stage to obtain the desired number of realizations, and then run the summarizer.
 
 The result of this process is a *realization reference* which looks like this:
 
-```python, wrap=False
+
+```python
 print(rref)
 ```
 
+```
+rref:1187a83d1366ebdd411ec945d3c7cf0b-15916de4c76ec240e88e03f819db20be-analyzer
+```
+
+
+
 It has a good property that we could always convert it to a system path:
 
-```python, wrap=False
+
+```python
 print(rref2path(rref))
 ```
 
+```
+/tmp/ultimatum/15916de4c76ec240e88e03f819db20be-analyzer/1187a83d1366ebdd411ec945d3c7cf0b
+```
+
+
+
 To inspect content of the realization, we just list the folder it points to.
 Also we could use one of small shell-like helpers, defined in Pylightnix:
+
 
 ```python
 from pylightnix import lsref
@@ -244,13 +285,18 @@ from pylightnix import lsref
 print(lsref(rref))
 ```
 
+```
+['context.json', '__buildtime__.txt', 'figure.png']
+```
+
+
+
 Later we could instruct rendering tools to include `figure.png` into
 our experiment report. I did exactly that while writing this tutorial:
 
-```python, echo=False
-realize(clo, force_rebuild=[clo.dref])
-plt.show()
-```
+
+![](figures/Pylightnix_figure11_1.png)\
+
 
 Happy hacking!
 

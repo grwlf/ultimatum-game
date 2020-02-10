@@ -1,7 +1,7 @@
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+# import matplotlib
+# matplotlib.use('Agg')
+# import matplotlib.pyplot as plt
 
 from numpy import linspace, array, arange, clip, isclose
 from numpy.random import choice, uniform, seed
@@ -165,45 +165,44 @@ def evolve(e:Evolution, comp:Competition, pop:Population)->Population:
 
 
 
-def plot_runtime(
-    name:str,
-    save_png:bool=True
-    )->Callable[[List[Float],Dict[str,Dict[str,Any]]],None]:
-  """ Generic runtime plotter. Take name, return updater function to feed the
-  plot with updated data """
-  fig=plt.figure()
-  ax=fig.add_subplot(1, 1, 1)
-  ax.set_ylabel(name)
-  ax.grid()
-  pl:dict={}
+# def plot_runtime(
+#     name:str,
+#     save_png:bool=True
+#     )->Callable[[List[Float],Dict[str,Dict[str,Any]]],None]:
+#   """ Generic runtime plotter. Take name, return updater function to feed the
+#   plot with updated data """
+#   fig=plt.figure()
+#   ax=fig.add_subplot(1, 1, 1)
+#   ax.set_ylabel(name)
+#   ax.grid()
+#   pl:dict={}
 
-  def updater(x,ys):
-    nonlocal pl
-    ax.collections.clear()
-    for nm,y in ys.items():
-      ymean=np.array(y['mean'])
-      if (nm+'-mean') not in pl:
-        pl[nm+'-mean']=ax.plot(x,ymean,label=nm,color=y['color'])[0]
-        if 'std' in y:
-          ystd=np.array(y['std'])
-          pl[nm+'-std']=ax.fill_between(x, ymean-ystd, ymean+ystd, facecolor=y['color'], alpha=0.3)
-      else:
-        pl[nm+'-mean'].set_data(x,ymean)
-        # pl[nm+'-std'].set_data(x,ymean-ystd, ymean+ystd)
-        if 'std' in y:
-          ystd=np.array(y['std'])
-          pl[nm+'-std']=ax.fill_between(x, ymean-ystd, ymean+ystd, facecolor=y['color'], alpha=0.3)
+#   def updater(x,ys):
+#     nonlocal pl
+#     ax.collections.clear()
+#     for nm,y in ys.items():
+#       ymean=np.array(y['mean'])
+#       if (nm+'-mean') not in pl:
+#         pl[nm+'-mean']=ax.plot(x,ymean,label=nm,color=y['color'])[0]
+#         if 'std' in y:
+#           ystd=np.array(y['std'])
+#           pl[nm+'-std']=ax.fill_between(x, ymean-ystd, ymean+ystd, facecolor=y['color'], alpha=0.3)
+#       else:
+#         pl[nm+'-mean'].set_data(x,ymean)
+#         # pl[nm+'-std'].set_data(x,ymean-ystd, ymean+ystd)
+#         if 'std' in y:
+#           ystd=np.array(y['std'])
+#           pl[nm+'-std']=ax.fill_between(x, ymean-ystd, ymean+ystd, facecolor=y['color'], alpha=0.3)
 
-    ax.relim()
-    ax.autoscale_view()
-    ax.legend()
-    fig.canvas.draw()
-    plt.pause(0.00001)  # http://stackoverflow.com/a/24228275
-    if save_png:
-      plt.savefig(name+'.png')
-      print(f"Saved {name+'.png'}")
+#     ax.relim()
+#     ax.autoscale_view()
+#     ax.legend()
+#     fig.canvas.draw()
+#     plt.pause(0.00001)  # http://stackoverflow.com/a/24228275
+#     if save_png:
+#       plt.savefig(name+'.png')
 
-  return updater
+#   return updater
 
 
 
@@ -233,16 +232,16 @@ def run1(cwd:Optional[str]=None, *args, **kwargs):
 
   epoches=[];
   pmeans=[]; rmeans=[]
-  updater=plot_runtime('evolution', save_png=True)
+  # updater=plot_runtime('evolution', save_png=True)
   for i,pop in runI(*args,**kwargs):
     pmean,pstd=strat_stat(pstat(pop).mean_proposer_strategy)
     rmean,rstd=strat_stat(pstat(pop).mean_responder_strategy)
-    print(i,pmean,pstd,rmean,rstd)
     epoches.append(float(i))
     pmeans.append(pmean); rmeans.append(rmean)
     if i%10 == 0:
-      updater(epoches,{"Proposer's mean":{'mean':pmeans,'color':'blue'},
-                       "Responder's mean":{'mean':rmeans,'color':'orange'}})
+      print(i,pmean,pstd,rmean,rstd)
+      # updater(epoches,{"Proposer's mean":{'mean':pmeans,'color':'blue'},
+      #                  "Responder's mean":{'mean':rmeans,'color':'orange'}})
 
   with open('history.json','w') as f:
     f.write(json_dumps([epoches, pmeans, rmeans], indent=4))

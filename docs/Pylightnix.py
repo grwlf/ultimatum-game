@@ -34,7 +34,7 @@ def evolution_realize(b:Build)->None:
 
 def evolution_stage(m:Manager)->DRef:
   return mkdrv(m, config=evolution_config(),
-                  matcher=match_latest(top=10),
+                  matcher=match_latest(n=10),
                   realizer=build_wrapper(evolution_realize))
 
 import matplotlib.pyplot as plt
